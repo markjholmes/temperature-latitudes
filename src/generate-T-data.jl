@@ -1,4 +1,4 @@
-using CSV, Distributions, JLD2, DataFrames # todo stop this being a csv maybe? this is gross
+# todo stop this being a csv maybe? this is gross
 
 mean_dat = CSV.read("data/rezende2019-plant-means.csv", DataFrame)
 means = mean_dat.x
