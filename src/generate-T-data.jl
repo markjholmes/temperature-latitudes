@@ -19,32 +19,77 @@ true_cov <- function(mat) {
     return(M)
 }
 
-percs <- c(0.15, 0.85)
+percs <- c(0.01, 0.99)
 
-rez_dat <- read.csv("data/rezende2019-supp.csv") %>%
-    filter(Type == "biochem") %>%
-    dplyr::select(Q10:d)
+dat <- read.csv("data/rezende2019-supp.csv") %>%
+    dplyr::filter(Type != "run") %>%
+    dplyr::select(Type, Q10:d) %>%
+    # these two appear to weird so we log now to exp later
+    mutate(C = log(C), d = log(d)) %>%
+    rename("y" = C, "q" = Q10, "z" = Tth, "w" = d)
 
-res_summary <- rez_dat %>%
+# ------------------------------------------------------------------------------
+# plants
+# ------------------------------------------------------------------------------
+
+plant_dat <- dat %>%
+    dplyr::filter(Type != "run") %>%
+    dplyr::select(-Type)
+
+plant_summary <- plant_dat %>%
     summarise(across(everything(), ~ list(quantile(., percs))))
 
-rez_vars <- rez_dat %>%
-    filter(between(Q10, res_summary$Q10[[1]][1], res_summary$Q10[[1]][2]),
-        between(C, res_summary$C[[1]][1], res_summary$C[[1]][2]),
-        between(Tth, res_summary$Tth[[1]][1], res_summary$Tth[[1]][2]),
-        between(d, res_summary$d[[1]][1], res_summary$d[[1]][2]) )
+plant_vars <- plant_dat %>%
+    filter(
+        between(q, plant_summary$q[[1]][1], plant_summary$q[[1]][2]),
+        between(y, plant_summary$y[[1]][1], plant_summary$y[[1]][2]),
+        between(z, plant_summary$z[[1]][1], plant_summary$z[[1]][2]),
+        between(w, plant_summary$w[[1]][1], plant_summary$w[[1]][2])
+        )
 
-ret <- list(names = colnames(rez_vars),
-    means = colMeans(rez_vars),
-    covs = true_cov(rez_vars))
+# ------------------------------------------------------------------------------
+# insects
+# ------------------------------------------------------------------------------
+
+insect_dat <- dat %>%
+    dplyr::filter(Type != "fit") %>%
+    dplyr::select(-Type)
+
+insect_summary <- insect_dat %>%
+    summarise(across(everything(), ~ list(quantile(., percs))))
+
+insect_vars <- insect_dat %>%
+    filter(
+        between(q, insect_summary$q[[1]][1], insect_summary$q[[1]][2]),
+        between(y, insect_summary$y[[1]][1], insect_summary$y[[1]][2]),
+        between(z, insect_summary$z[[1]][1], insect_summary$z[[1]][2]),
+        between(w, insect_summary$w[[1]][1], insect_summary$w[[1]][2])
+        )
+
+# ------------------------------------------------------------------------------
+# export
+# ------------------------------------------------------------------------------
+
+ret <- list(
+    #
+    plant_names = colnames(plant_vars),
+    plant_means = colMeans(plant_vars),
+    plant_covs = true_cov(plant_vars),
+    #
+    insect_names = colnames(insect_vars),
+    insect_means = colMeans(insect_vars),
+    insect_covs = true_cov(insect_vars)
+    )
 """
 
 ret = @rget ret
 
 save("data/T_dist.jld2",
     Dict(
-        "T_dist" => MvNormal(ret[:means], ret[:covs]),
-        "names" => Tuple(Symbol.(ret[:names]))
+        "plant_T_dist" => MvNormal(ret[:plant_means], ret[:plant_covs]),
+        "plant_names" => Tuple(Symbol.(ret[:plant_names])),
+        "insect_T_dist" => MvNormal(ret[:insect_means], ret[:insect_covs]),
+        "insect_names" => Tuple(Symbol.(ret[:insect_names]))
         )
     )
 
