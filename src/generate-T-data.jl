@@ -113,18 +113,9 @@ ret <- list(
 
 const coefs = @rget ret
 
-function Trange_from_latitude(x)
-    cmin = coefs[:min]
-    cmax = coefs[:max]
-    Tmin = cmin[:intercept] + x * cmin[:linear_term] + x^2 * cmin[:quadratic_term]
-    Tmax = cmax[:intercept] + x * cmax[:linear_term] + x^2 * cmax[:quadratic_term]
-    return Tmin, Tmax
-end
-
 save("data/latitude_T.jld2",
     Dict(
         "min" => coefs[:min],
-        "max" => coefs[:max],
-        "Trange_from_latitude" => Trange_from_latitude
+        "max" => coefs[:max]
         )
     )
