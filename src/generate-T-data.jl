@@ -67,9 +67,9 @@ compute_average <- function(stack_summary, name) {
 }
 
 # data from https://worldclim.org/data/worldclim21.html
-dir_min <- "/home/mark_holmes/computron/data/wc2.1_10m_tmin"
-dir_max <- "/home/mark_holmes/computron/data/wc2.1_10m_tmax"
-dir_avg <- "/home/mark_holmes/computron/data/wc2.1_10m_tavg"
+dir_min <- "data/wc2.1_10m_tmin"
+dir_avg <- "data/wc2.1_10m_tavg"
+dir_max <- "data/wc2.1_10m_tmax"
 
 # we need the yearly average as well as the average minimum in the winter and the average maximum in the summer
 min_files <- list.files(dir_min, full.names = TRUE)
