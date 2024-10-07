@@ -143,8 +143,6 @@ t_colours <- setNames(hcl.colors(3, "Berlin"), levels(temperature$type))
 mods <- t(data.frame(
     min = coef(lm(value ~ poly(latitude, 2, raw = TRUE),
         subset(temperature, type == "Minimum"))),
-    # avg = coef(lm(value ~ poly(latitude, 2, raw = TRUE),
-    #     subset(temperature, type == "Average"))),
     max = coef(lm(value ~ poly(latitude, 2, raw = TRUE),
         subset(temperature, type == "Maximum"))))) %>% as.data.frame %>%
     rownames_to_column("type")
