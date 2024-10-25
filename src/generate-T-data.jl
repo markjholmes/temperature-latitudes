@@ -80,68 +80,73 @@ save("data/T_dist.jld2",
 # temperature distribution
 # ==============================================================================
 
-# thank you to https://askubuntu.com/questions/1211782/curl-openssl-4-not-found-required-by-curl for resolving the CURL issue that was arising here
-R"""
-library("tidyverse")
-library("raster")
-library("terra")
-
-compute_average <- function(stack_summary, name) {
-    lats <- seq(ymin(stack_summary), ymax(stack_summary), length = nrow(stack_summary))
-    sum_by_lat <- rowSums(stack_summary, na.rm = TRUE)
-    n_obs_by_lat <- rowSums(!is.na(stack_summary), na.rm = TRUE)
-    average_by_lat <- sum_by_lat / n_obs_by_lat
-    return (data.frame(type = name, latitude = lats, value = average_by_lat))
-}
+using ArchGDAL, Rasters
 
 # data from https://worldclim.org/data/worldclim21.html
-dir_min <- "data/wc2.1_10m_tmin"
-dir_avg <- "data/wc2.1_10m_tavg"
-dir_max <- "data/wc2.1_10m_tmax"
+dir_min = "data/wc2.1_10m_tmin"
+dir_avg = "data/wc2.1_10m_tavg"
+dir_max = "data/wc2.1_10m_tmax"
 
 # we need the yearly average as well as the average minimum in the winter and the average maximum in the summer
-min_files <- list.files(dir_min, full.names = TRUE)
-avg_files <- list.files(dir_avg, full.names = TRUE)
-max_files <- list.files(dir_max, full.names = TRUE)
+min_files = readdir(dir_min, join = true)
+avg_files = readdir(dir_avg, join = true)
+max_files = readdir(dir_max, join = true)
 
-min_stack <- stack(lapply(min_files, function(i) {raster(i)}))
-avg_stack <- stack(lapply(avg_files, function(i) {raster(i)}))
-max_stack <- stack(lapply(max_files, function(i) {raster(i)}))
+min_stack = Raster.(min_files)
+avg_stack = Raster.(avg_files)
+max_stack = Raster.(max_files)
 
-min_stack_summary <- min(min_stack, na.rm = TRUE)
-avg_stack_summary <- mean(avg_stack, na.rm = TRUE)
-max_stack_summary <- max(max_stack, na.rm = TRUE)
+min_stack_summary = mosaic(minimum, min_stack)
+avg_stack_summary = mosaic(mean, avg_stack)
+max_stack_summary = mosaic(maximum, max_stack)
 
-Tmin_lats <- compute_average(min_stack_summary, "tmin")
-Tavg_lats <- compute_average(avg_stack_summary, "tavg")
-Tmax_lats <- compute_average(max_stack_summary, "tmax")
+using GLM, CairoMakie
 
-temperature <- bind_rows(Tmin_lats, Tmax_lats, Tavg_lats) %>%
-    mutate(type = factor(type,
-        levels = c("tmin", "tavg", "tmax"),
-        labels = c("Minimum", "Average", "Maximum")))
+function lat_means(x)
+    nan = x.missingval
+    lats = eachcol(x.data)
+    fixed_lats = filter.(x -> x != nan, lats)
+    return mean.(fixed_lats)
+end
 
-t_colours <- setNames(hcl.colors(3, "Berlin"), levels(temperature$type))
+lats = dims(min_stack_summary)[2].val.data
+Tmin_lats = lat_means(min_stack_summary)
+Tavg_lats = lat_means(avg_stack_summary)
+Tmax_lats = lat_means(max_stack_summary)
 
-mods <- t(data.frame(
-    min = coef(lm(value ~ poly(latitude, 2, raw = TRUE),
-        subset(temperature, type == "Minimum"))),
-    max = coef(lm(value ~ poly(latitude, 2, raw = TRUE),
-        subset(temperature, type == "Maximum"))))) %>% as.data.frame %>%
-    rownames_to_column("type")
+temperature = DataFrame(
+    latitude = lats,
+    Tmin = Float64.(Tmin_lats),
+    Tavg = Float64.(Tavg_lats),
+    Tmax = Float64.(Tmax_lats))
 
-colnames(mods) <- c("type", "intercept", "linear_term", "quadratic_term")
+subset!(temperature, (names(temperature) .=> ByRow(x -> !isnan(x)))...)
 
-ret <- list(
-    min = c(subset(mods, type == "min"))[-1],
-    max = c(subset(mods, type == "max"))[-1])
-"""
+min_mod = lm(@formula(Tmin ~ latitude + latitude^2), temperature)
+avg_mod = lm(@formula(Tavg ~ latitude + latitude^2), temperature)
+max_mod = lm(@formula(Tmax ~ latitude + latitude^2), temperature)
 
-const coefs = @rget ret
+begin
+    fig = Figure()
+    ax = Axis(fig[1,1])
+    plot!(avg_stack_summary)
+    ax2 = Axis(fig[1,2], xlabel = "Temperature", ylabel = "Latitude")
+    ylims!(extrema(lats)...)
+    lmin = lines!(Tmin_lats, lats, color = :blue)
+    lavg = lines!(Tavg_lats, lats, color = :grey)
+    lmax = lines!(Tmax_lats, lats, color = :orange)
+    lines!(Float64.(predict(min_mod, DataFrame(latitude = lats))),
+        lats, color = :blue, linestyle = :dash)
+    lines!(Float64.(predict(avg_mod, DataFrame(latitude = lats))),
+        lats, color = :grey, linestyle = :dash)
+    lines!(Float64.(predict(max_mod, DataFrame(latitude = lats))),
+        lats, color = :orange, linestyle = :dash)
+    axislegend(ax2, [lmin, lavg, lmax], ["Min", "Average", "Max"]; position = :lc)
+    fig
+end
 
-save("data/latitude_T.jld2",
-    Dict(
-        "min" => coefs[:min],
-        "max" => coefs[:max]
-        )
-    )
+term_names = (:intercept, :linear_term, :quadratic_term)
+mods = Dict("min" => NamedTuple{term_names}(coef(min_mod)),
+    "max" => NamedTuple{term_names}(coef(max_mod)))
+
+save("data/latitude_T.jld2", mods)
