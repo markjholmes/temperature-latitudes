@@ -1,88 +1,71 @@
-using RCall, JLD2, Distributions
+using JLD2, Distributions, CSV, DataFrames
 
 # ==============================================================================
 # TPC
 # ==============================================================================
 
-R"""
-library("tidyverse")
+function true_cov(mat)
+    n = size(mat)[2]
+    M = zeros(n, n)
+    for i in 1:n
+        for j in 1:n
+            M[i,j] = mean((mat[:,i] .- mean(mat[:,i])) .* (mat[:,j] .- mean(mat[:,j])))
+        end
+    end
+    # rownames(M) <- colnames(M) <- colnames(mat)
+    return M
+end
 
-true_cov <- function(mat) {
-    n <- ncol(mat)
-    M <- matrix(NA, nrow = n, ncol = n)
-    for (i in 1:n) {
-        for (j in 1:n) {
-            M[i,j] <- mean((mat[,i] - mean(mat[,i])) * (mat[,j] - mean(mat[,j])))
-        }
-    }
-    rownames(M) <- colnames(M) <- colnames(mat)
-    return(M)
-}
+dat = CSV.read("data/rezende2019-supp.csv", DataFrame)
+filter!(:Type => x -> x != "run", dat)
+select!(dat, :Type, :Q10, :C, :Tth, :d)
+transform!(dat, :C => ByRow(C -> log(C)) => :C)
+transform!(dat, :d => ByRow(d -> log(d)) => :d)
+rename!(dat, :C => "y", :Q10 => "q", :Tth => "z", :d => "w")
 
-percs <- c(0.01, 0.99)
+percs = (0.01, 0.99)
+qpercs(x) = quantile(x, percs)
+≬(x, y) = y[1] < x < y[2]
 
-dat <- read.csv("data/rezende2019-supp.csv") %>%
-    dplyr::filter(Type != "run") %>%
-    dplyr::select(Type, Q10:d) %>%
-    # these two appear to weird so we log now to exp later
-    mutate(C = log(C), d = log(d)) %>%
-    rename("y" = C, "q" = Q10, "z" = Tth, "w" = d)
-
-# ------------------------------------------------------------------------------
 # plants
-# ------------------------------------------------------------------------------
+plant_dat = filter(:Type => x -> x == "biochem", dat)
+select!(plant_dat, :q, :y, :z, :w)
 
-plant_dat <- dat %>%
-    dplyr::filter(Type != "run") %>%
-    dplyr::select(-Type)
+par_percs = NamedTuple{Tuple(Symbol.(names(plant_dat)))}(
+    (qpercs(plant_dat[!, par]) for par in Symbol.(names(plant_dat)))
+    )
 
-plant_summary <- plant_dat %>%
-    summarise(across(everything(), ~ list(quantile(., percs))))
+plant_vars = plant_dat[
+    .≬(plant_dat.q, Ref(par_percs.q)) .& .≬(plant_dat.y, Ref(par_percs.y)) .&
+    .≬(plant_dat.z, Ref(par_percs.z)) .& .≬(plant_dat.w, Ref(par_percs.w)),:
+]
 
-plant_vars <- plant_dat %>%
-    filter(
-        between(q, plant_summary$q[[1]][1], plant_summary$q[[1]][2]),
-        between(y, plant_summary$y[[1]][1], plant_summary$y[[1]][2]),
-        between(z, plant_summary$z[[1]][1], plant_summary$z[[1]][2]),
-        between(w, plant_summary$w[[1]][1], plant_summary$w[[1]][2])
-        )
-
-# ------------------------------------------------------------------------------
 # insects
-# ------------------------------------------------------------------------------
+insect_dat = filter(:Type => x -> x == "fit", dat)
+select!(insect_dat, :q, :y, :z, :w)
 
-insect_dat <- dat %>%
-    dplyr::filter(Type != "fit") %>%
-    dplyr::select(-Type)
+par_percs = NamedTuple{Tuple(Symbol.(names(insect_dat)))}(
+    (qpercs(insect_dat[!, par]) for par in Symbol.(names(insect_dat)))
+    )
 
-insect_summary <- insect_dat %>%
-    summarise(across(everything(), ~ list(quantile(., percs))))
+insect_vars = insect_dat[
+    .≬(insect_dat.q, Ref(par_percs.q)) .& .≬(insect_dat.y, Ref(par_percs.y)) .&
+    .≬(insect_dat.z, Ref(par_percs.z)) .& .≬(insect_dat.w, Ref(par_percs.w)),:
+]
 
-insect_vars <- insect_dat %>%
-    filter(
-        between(q, insect_summary$q[[1]][1], insect_summary$q[[1]][2]),
-        between(y, insect_summary$y[[1]][1], insect_summary$y[[1]][2]),
-        between(z, insect_summary$z[[1]][1], insect_summary$z[[1]][2]),
-        between(w, insect_summary$w[[1]][1], insect_summary$w[[1]][2])
-        )
 
-# ------------------------------------------------------------------------------
-# export
-# ------------------------------------------------------------------------------
+# compute
 
-ret <- list(
+ret =  (
     #
-    plant_names = colnames(plant_vars),
-    plant_means = colMeans(plant_vars),
+    plant_names = names(plant_vars),
+    plant_means = mean.(eachcol(plant_vars)),
     plant_covs = true_cov(plant_vars),
     #
-    insect_names = colnames(insect_vars),
-    insect_means = colMeans(insect_vars),
+    insect_names = names(insect_vars),
+    insect_means = mean.(eachcol(insect_vars)),
     insect_covs = true_cov(insect_vars)
-    )
-"""
-
-ret = @rget ret
+)
 
 save("data/T_dist.jld2",
     Dict(
