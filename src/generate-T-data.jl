@@ -75,6 +75,7 @@ save("data/T_dist.jld2",
         "insect_names" => Tuple(Symbol.(ret[:insect_names]))
         )
     )
+println("Saved TPC distributions")
 
 # ==============================================================================
 # temperature distribution
@@ -152,3 +153,4 @@ mods = Dict("min" => NamedTuple{term_names}(coef(min_mod)),
     "max" => NamedTuple{term_names}(coef(max_mod)))
 
 save("data/latitude_T.jld2", mods)
+println("Saved latitude coefficients")
