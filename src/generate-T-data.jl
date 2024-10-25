@@ -127,10 +127,10 @@ avg_mod = lm(@formula(Tavg ~ latitude + latitude^2), temperature)
 max_mod = lm(@formula(Tmax ~ latitude + latitude^2), temperature)
 
 begin
-    fig = Figure()
-    ax = Axis(fig[1,1])
+    fig = Figure(size = (1000, 400))
+    ax = Axis(fig[1,1], ylabel = "Latitude", xlabel = "Longitude")
     plot!(avg_stack_summary)
-    ax2 = Axis(fig[1,2], xlabel = "Temperature", ylabel = "Latitude")
+    ax2 = Axis(fig[1,2], xlabel = "Temperature", yticklabelsvisible = false)
     ylims!(extrema(lats)...)
     lmin = lines!(Tmin_lats, lats, color = :blue)
     lavg = lines!(Tavg_lats, lats, color = :grey)
@@ -141,9 +141,11 @@ begin
         lats, color = :grey, linestyle = :dash)
     lines!(Float64.(predict(max_mod, DataFrame(latitude = lats))),
         lats, color = :orange, linestyle = :dash)
-    axislegend(ax2, [lmin, lavg, lmax], ["Min", "Average", "Max"]; position = :lc)
+    axislegend(ax2, [lmin, lavg, lmax], ["Min", "Average", "Max"]; position = :lt)
     fig
 end
+
+save("plots/temperature-latitude.png", fig)
 
 term_names = (:intercept, :linear_term, :quadratic_term)
 mods = Dict("min" => NamedTuple{term_names}(coef(min_mod)),
