@@ -12,7 +12,6 @@ function true_cov(mat)
             M[i,j] = mean((mat[:,i] .- mean(mat[:,i])) .* (mat[:,j] .- mean(mat[:,j])))
         end
     end
-    # rownames(M) <- colnames(M) <- colnames(mat)
     return M
 end
 
