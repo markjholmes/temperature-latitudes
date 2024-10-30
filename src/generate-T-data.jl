@@ -22,7 +22,7 @@ transform!(dat, :C => ByRow(C -> log(C)) => :C)
 transform!(dat, :d => ByRow(d -> log(d)) => :d)
 rename!(dat, :C => "y", :Q10 => "q", :Tth => "z", :d => "w")
 
-percs = (0.01, 0.99)
+percs = (0.1, 0.9)
 qpercs(x) = quantile(x, percs)
 ≬(x, y) = y[1] < x < y[2]
 
