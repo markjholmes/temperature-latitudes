@@ -64,7 +64,7 @@ plant_covs <- true_cov(plant_vars)
 rownames(plant_covs) <- colnames(plant_covs) <- names(plant_vars)
 plant_covs <- data.frame(plant_covs)
 
-write.csv(plant_means, "data/plant-means.csv")
+write.csv(plant_means, "data/plant-means.csv", row.names = FALSE)
 write.csv(plant_covs, "data/plant-covs.csv")
 
 #
@@ -74,7 +74,7 @@ insect_covs <- true_cov(insect_vars)
 rownames(insect_covs) <- colnames(insect_covs) <- names(insect_vars)
 insect_covs <- data.frame(insect_covs)
 
-write.csv(insect_means, "data/insect-means.csv")
+write.csv(insect_means, "data/insect-means.csv", row.names = FALSE)
 write.csv(insect_covs, "data/insect-covs.csv")
 
 # ==============================================================================
