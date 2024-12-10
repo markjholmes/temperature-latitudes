@@ -6,19 +6,19 @@ library("geodata")
 # TPC
 # ==============================================================================
 
-true_cov <- function (mat)
-    n <- size(mat)[2]
-    M <- zeros(n, n)
-    for i in 1:n
-        for j in 1:n
-            M[i,j] <- mean((mat[:,i] .- mean(mat[:,i])) .* (mat[:,j] .- mean(mat[:,j])))
-        end
-    end
-    return M
-end
+true_cov <- function (mat) {
+    n <- ncol(mat)
+    M <- matrix(0, n, n)
+    for (i in 1:n) {
+        for (j in 1:n) {
+            M[i,j] <- mean((mat[,i] - mean(mat[,i])) * (mat[,j] - mean(mat[,j])))
+        }
+    }
+    return(M)
+}
 
 dat <- read.csv("data/rezende2019-supp.csv") %>%
-    filter(x != "run") %>%
+    filter(Type != "run") %>%
     select(Type, Q10, C, Tth, d) %>%
     mutate(C = log(C), d = log(d)) %>%
     rename("y" = C, "q" = Q10, "z" = Tth, "w" = d)
@@ -29,129 +29,119 @@ qpercs <- function(x) quantile(x, percs)
 # ≬(x, y) = y[1] < x < y[2]
 
 # plants
-plant_dat = filter(:Type => x -> x == "biochem", dat)
-select!(plant_dat, :q, :y, :z, :w)
+plant_dat <- dat %>%
+    filter(Type == "biochem") %>%
+    select(q, y, z, w)
 
-par_percs = NamedTuple{Tuple(Symbol.(names(plant_dat)))}(
-    (qpercs(plant_dat[!, par]) for par in Symbol.(names(plant_dat)))
-    )
+plant_percs <- lapply(plant_dat, qpercs)
 
-plant_vars = plant_dat[
-    .≬(plant_dat.q, Ref(par_percs.q)) .& .≬(plant_dat.y, Ref(par_percs.y)) .&
-    .≬(plant_dat.z, Ref(par_percs.z)) .& .≬(plant_dat.w, Ref(par_percs.w)),:
-]
+plant_vars <- plant_dat %>%
+    filter(
+        q > plant_percs$q[1], q < plant_percs$q[2],
+        y > plant_percs$y[1], y < plant_percs$y[2],
+        z > plant_percs$z[1], z < plant_percs$z[2],
+        w > plant_percs$w[1], w < plant_percs$w[2])
 
 # insects
-insect_dat = filter(:Type => x -> x == "fit", dat)
-select!(insect_dat, :q, :y, :z, :w)
+insect_dat <- dat %>%
+    filter(Type == "fit") %>%
+    select(q, y, z, w)
 
-par_percs = NamedTuple{Tuple(Symbol.(names(insect_dat)))}(
-    (qpercs(insect_dat[!, par]) for par in Symbol.(names(insect_dat)))
-    )
+insect_percs <- lapply(insect_dat, qpercs)
 
-insect_vars = insect_dat[
-    .≬(insect_dat.q, Ref(par_percs.q)) .& .≬(insect_dat.y, Ref(par_percs.y)) .&
-    .≬(insect_dat.z, Ref(par_percs.z)) .& .≬(insect_dat.w, Ref(par_percs.w)),:
-]
-
+insect_vars <- insect_dat %>%
+    filter(
+        q > insect_percs$q[1], q < insect_percs$q[2],
+        y > insect_percs$y[1], y < insect_percs$y[2],
+        z > insect_percs$z[1], z < insect_percs$z[2],
+        w > insect_percs$w[1], w < insect_percs$w[2])
 
 # compute
 
-ret =  (
-    #
-    plant_names = names(plant_vars),
-    plant_means = mean.(eachcol(plant_vars)),
-    plant_covs = true_cov(plant_vars),
-    #
-    insect_names = names(insect_vars),
-    insect_means = mean.(eachcol(insect_vars)),
-    insect_covs = true_cov(insect_vars)
-)
+plant_means <- data.frame(lapply(plant_vars, mean))
 
-save("data/T_dist.jld2",
-    Dict(
-        "plant_T_dist" => MvNormal(ret[:plant_means], ret[:plant_covs]),
-        "plant_names" => Tuple(Symbol.(ret[:plant_names])),
-        "insect_T_dist" => MvNormal(ret[:insect_means], ret[:insect_covs]),
-        "insect_names" => Tuple(Symbol.(ret[:insect_names]))
-        )
-    )
-println("Saved TPC distributions")
+plant_covs <- true_cov(plant_vars)
+rownames(plant_covs) <- colnames(plant_covs) <- names(plant_vars)
+plant_covs <- data.frame(plant_covs)
+
+write.csv(plant_means, "data/plant-means.csv")
+write.csv(plant_covs, "data/plant-covs.csv")
+
+#
+insect_means <- data.frame(lapply(insect_vars, mean))
+
+insect_covs <- true_cov(insect_vars)
+rownames(insect_covs) <- colnames(insect_covs) <- names(insect_vars)
+insect_covs <- data.frame(insect_covs)
+
+write.csv(insect_means, "data/insect-means.csv")
+write.csv(insect_covs, "data/insect-covs.csv")
 
 # ==============================================================================
 # temperature distribution
-# ==============================================================================
-
-using ArchGDAL, Rasters
+# ======================0========================================================
 
 # data from https://worldclim.org/data/worldclim21.html
-dir_min = "data/wc2.1_10m_tmin"
-dir_avg = "data/wc2.1_10m_tavg"
-dir_max = "data/wc2.1_10m_tmax"
+dir_min <- "data/worldclim-tmin"
+dir_avg <- "data/worldclim-tavg"
+dir_max <- "data/worldclim-tmax"
+
+# 
+worldclim_global("tmin", res = 10, path = dir_min)
+worldclim_global("tavg", res = 10, path = dir_avg)
+worldclim_global("tmax", res = 10, path = dir_max)
 
 # we need the yearly average as well as the average minimum in the winter and the average maximum in the summer
-min_files = readdir(dir_min, join = true)
-avg_files = readdir(dir_avg, join = true)
-max_files = readdir(dir_max, join = true)
 
-min_stack = Raster.(min_files)
-avg_stack = Raster.(avg_files)
-max_stack = Raster.(max_files)
+min_files <- list.files(dir_min, recursive = TRUE, full.names = TRUE)
+avg_files <- list.files(dir_avg, recursive = TRUE, full.names = TRUE)
+max_files <- list.files(dir_max, recursive = TRUE, full.names = TRUE)
 
-min_stack_summary = mosaic(minimum, min_stack)
-avg_stack_summary = mosaic(mean, avg_stack)
-max_stack_summary = mosaic(maximum, max_stack)
+min_stack <- stack(lapply(min_files, raster))
+avg_stack <- stack(sapply(avg_files, raster))
+max_stack <- stack(sapply(max_files, raster))
 
-using GLM, CairoMakie
+min_min <- min(min_stack, na.rm = TRUE)
+avg_avg <- mean(avg_stack, na.rm = TRUE)
+max_max <- max(max_stack, na.rm = TRUE)
 
-function lat_means(x)
-    nan = x.missingval
-    lats = eachcol(x.data)
-    fixed_lats = filter.(x -> x != nan, lats)
-    return mean.(fixed_lats)
-end
+min_lats <- rowSums(min_min, na.rm = TRUE) / rowSums(!is.na(min_min), na.rm = TRUE)
+avg_lats <- rowSums(avg_avg, na.rm = TRUE) / rowSums(!is.na(avg_avg), na.rm = TRUE)
+max_lats <- rowSums(max_max, na.rm = TRUE) / rowSums(!is.na(max_max), na.rm = TRUE)
+lats <- unique(coordinates(min_min)[,2])
 
-lats = dims(min_stack_summary)[2].val.data
-Tmin_lats = lat_means(min_stack_summary)
-Tavg_lats = lat_means(avg_stack_summary)
-Tmax_lats = lat_means(max_stack_summary)
-
-temperature = DataFrame(
+dat_by_lat <- data.frame(
     latitude = lats,
-    Tmin = Float64.(Tmin_lats),
-    Tavg = Float64.(Tavg_lats),
-    Tmax = Float64.(Tmax_lats))
+    Tmin = min_lats,
+    Tavg = avg_lats,
+    Tmax = max_lats) %>%
+    na.omit
 
-subset!(temperature, (names(temperature) .=> ByRow(x -> !isnan(x)))...)
+write.csv(dat_by_lat, "data/dat-by-lat.csv", row.names = FALSE)
 
-min_mod = lm(@formula(Tmin ~ latitude + latitude^2), temperature)
-avg_mod = lm(@formula(Tavg ~ latitude + latitude^2), temperature)
-max_mod = lm(@formula(Tmax ~ latitude + latitude^2), temperature)
+ggplot(dat_by_lat) +
+    aes(x = latitude) +
+    geom_path(aes(y = Tmin), color = "blue") +
+    geom_smooth(aes(y = Tmin), method = "glm", formula = y ~ poly(x, 2),
+        lty = 2, color = "blue") +
+    geom_path(aes(y = Tavg), color = "grey") +
+    geom_smooth(aes(y = Tavg), method = "glm", formula = y ~ poly(x, 2),
+        lty = 2, color = "grey") +
+    geom_path(aes(y = Tmax), color = "red") + 
+    geom_smooth(aes(y = Tmax), method = "glm", formula = y ~ poly(x, 2),
+        lty = 2, color = "red") +
+    theme_bw() +
+    labs(x = "Latitude", y = "Temperature")
 
-begin
-    fig = Figure(size = (1000, 400))
-    ax = Axis(fig[1,1], ylabel = "Latitude", xlabel = "Longitude")
-    plot!(avg_stack_summary)
-    ax2 = Axis(fig[1,2], xlabel = "Temperature", yticklabelsvisible = false)
-    ylims!(extrema(lats)...)
-    lmin = lines!(Tmin_lats, lats, color = :blue)
-    lavg = lines!(Tavg_lats, lats, color = :grey)
-    lmax = lines!(Tmax_lats, lats, color = :orange)
-    lines!(Float64.(predict(min_mod, DataFrame(latitude = lats))),
-        lats, color = :blue, linestyle = :dash)
-    lines!(Float64.(predict(avg_mod, DataFrame(latitude = lats))),
-        lats, color = :grey, linestyle = :dash)
-    lines!(Float64.(predict(max_mod, DataFrame(latitude = lats))),
-        lats, color = :orange, linestyle = :dash)
-    axislegend(ax2, [lmin, lavg, lmax], ["Min", "Average", "Max"]; position = :lt)
-    fig
-end
+min_mod <- lm(Tmin ~ poly(latitude, 2, raw = TRUE), dat_by_lat)
+avg_mod <- lm(Tavg ~ poly(latitude, 2, raw = TRUE), dat_by_lat)
+max_mod <- lm(Tmax ~ poly(latitude, 2, raw = TRUE), dat_by_lat)
 
-save("plots/temperature-latitude.png", fig)
+term_names <- c("intercept", "linear_term", "quadratic_term")
 
-term_names = (:intercept, :linear_term, :quadratic_term)
-mods = Dict("min" => NamedTuple{term_names}(coef(min_mod)),
-    "max" => NamedTuple{term_names}(coef(max_mod)))
+dat_coef <- data.frame(rbind(coef(min_mod), coef(avg_mod), coef(max_mod))) %>%
+    mutate(type = c("min", "avg", "max"))
+colnames(dat_coef) <- c(term_names, "type")
+dat_coef <- relocate(dat_coef, type)
 
-save("data/latitude_T.jld2", mods)
-println("Saved latitude coefficients")
+write.csv(dat_coef, "data/model-coef-temperature.csv", row.names = FALSE)
