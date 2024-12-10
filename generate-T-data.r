@@ -133,6 +133,8 @@ ggplot(dat_by_lat) +
     theme_bw() +
     labs(x = "Latitude", y = "Temperature")
 
+ggsave("figs/regressions-by-lat.png", width = 6, height = 4)
+
 min_mod <- lm(Tmin ~ poly(latitude, 2, raw = TRUE), dat_by_lat)
 avg_mod <- lm(Tavg ~ poly(latitude, 2, raw = TRUE), dat_by_lat)
 max_mod <- lm(Tmax ~ poly(latitude, 2, raw = TRUE), dat_by_lat)
