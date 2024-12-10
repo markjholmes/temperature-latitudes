@@ -17,6 +17,15 @@ true_cov <- function (mat) {
     return(M)
 }
 
+thermal_performance <- function(temp, q, y, z, w) {
+    y <- exp(y)
+    w <- exp(w)
+    qln <- 0.1 * log(q)
+    phi <- y * exp(temp * qln)
+    psi <- ifelse(temp < z, 0, phi * w * (temp - z)^2)
+    return(phi - psi)
+}
+
 dat <- read.csv("data/rezende2019-supp.csv") %>%
     filter(Type != "run") %>%
     select(Type, Q10, C, Tth, d) %>%
@@ -25,8 +34,6 @@ dat <- read.csv("data/rezende2019-supp.csv") %>%
 
 percs <- c(0.1, 0.9)
 qpercs <- function(x) quantile(x, percs)
-
-# ≬(x, y) = y[1] < x < y[2]
 
 # plants
 plant_dat <- dat %>%
@@ -76,6 +83,28 @@ insect_covs <- data.frame(insect_covs)
 
 write.csv(insect_means, "data/insect-means.csv", row.names = FALSE)
 write.csv(insect_covs, "data/insect-covs.csv")
+
+# ==============================================================================
+# tpc plot
+# ==============================================================================
+
+plant_tpcs <- tibble(plant_vars) %>%
+    mutate(temp = list(-30:60), id = row_number()) %>%
+    unnest_longer(temp) %>%
+    mutate(tp = thermal_performance(temp, q, y, z, w)) %>%
+    ungroup %>%
+    mutate(tp_rel = tp / max(tp))
+
+ggplot(plant_tpcs) +
+    aes(x = temp, y = tp_rel) +
+    coord_cartesian(ylim = c(0, 1.05), xlim = c(-30, 60), expand = FALSE) +
+    geom_line(aes(col = as.factor(id))) +
+    geom_smooth(se = FALSE, color = "black") +
+    theme_bw() +
+    scale_color_discrete(guide = "none") +
+    labs(x = "Temperature", y= "Relative performance")
+
+ggsave("figs/tpc.png", width = 6, height = 4)
 
 # ==============================================================================
 # temperature distribution

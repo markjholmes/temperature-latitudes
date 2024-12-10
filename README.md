@@ -2,6 +2,8 @@
 
 Here I store some temperature data taken from Rezende and Bozinovic (2019) and do some regressions on it as a function of latitude. 
 
+![Thermal performance curves for the central 80% of the plant rates of photosynthesis from Rezende and Bozinovic 2019.](figs/tpc.png)
+
 ![Average minimum (blue), average average (grey), and average maximum (red) temperatures by latitude. Data taken from WORDLCLIM using the 'geodata' package in R.](figs/regressions-by-lat.png)
 
 ---
